@@ -1,0 +1,67 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: quarkus-backend-triggertemplate
+  namespace: quarkus-backend
+spec:
+  params:
+    - name: gitrepositoryurl
+      description: The git repository url
+    - name: comment-string
+      description: The comment string
+    - name: namespace
+      description: namespace to deploy into
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        name: quarkus-backend-build-$(uid)
+        namespace: quarkus-backend
+      spec:
+        serviceAccountName: pipeline
+        pipelineRef:
+          name: build-and-push
+        params:
+        - name: commit-comment
+          value: $(params.comment-string)
+        resources:
+          - name: quarkus-git
+            resourceSpec:
+              type: git
+              params:
+              - name: url
+                value: $(params.gitrepositoryurl)
+          - name: quarkus-backend-image
+            resourceSpec:
+              type: image
+              params:
+                - name: url
+                  value: image-registry.openshift-image-registry.svc:5000/$(params.namespace)/quarkus-backend:latest
+---
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: quarkus-backend-pipelinebinding
+  namespace: quarkus-backend
+spec:
+  params:
+    - name: gitrevision
+      value: $(body.head_commit.id)
+    - name: namespace
+      value: quarkus-backend
+    - name: gitrepositoryurl
+      value: "https://github.com/$(body.repository.full_name)"
+    - name: comment-string
+      value: $(body.head_commit.message)
+---
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: quarkus-listener
+spec:
+  serviceAccountName: pipeline
+  triggers:
+  - bindings:
+    - name: quarkus-backend-pipelinebinding
+    template:
+      name: quarkus-backend-triggertemplate

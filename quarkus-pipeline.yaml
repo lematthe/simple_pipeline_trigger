@@ -1,0 +1,41 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  name: build-and-push
+spec:
+  params:
+    - default: Unknown commit
+      description: The commit comment from the push notification
+      name: commit-comment
+      type: string
+  resources:
+    - name: quarkus-git
+      type: git
+    - name: quarkus-backend-image
+      type: image
+  tasks:
+    - name: build-backend
+      params:
+        - name: TLSVERIFY
+          value: 'false'
+        - name: MAVEN_ARGS_APPEND
+          value: '-Plocal'
+      resources:
+        inputs:
+          - name: source
+            resource: quarkus-git
+        outputs:
+          - name: image
+            resource: quarkus-backend-image
+      taskRef:
+        kind: ClusterTask
+        name: s2i-java-11
+    - name: echo-git-commit-comment
+      params:
+        - name: comment
+          value: $(params.commit-comment)
+      runAfter:
+        - build-backend
+      taskRef:
+        kind: Task
+        name: echo-git-commit-comment
